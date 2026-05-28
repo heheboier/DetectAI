@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DetectAI — AI Misinformation Detector</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0a0a0f;
+    --bg2: #111118;
+    --bg3: #18181f;
+    --surface: #1e1e28;
+    --surface2: #252530;
+    --border: rgba(255,255,255,0.08);
+    --border2: rgba(255,255,255,0.14);
+    --text: #f0f0f5;
+    --text2: #9090a8;
+    --text3: #5a5a72;
+    --accent: #6c63ff;
+    --accent2: #9b94ff;
+    --green: #22c97a;
+    --green-bg: rgba(34,201,122,0.1);
+    --amber: #f5a623;
+    --amber-bg: rgba(245,166,35,0.1);
+    --red: #ff4d6d;
+    --red-bg: rgba(255,77,109,0.1);
+    --mono: 'DM Mono', monospace;
+    --sans: 'Syne', sans-serif;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(108,99,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(108,99,255,0.03) 1px, transparent 1px);
+    background-size: 48px 48px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .glow {
+    position: fixed;
+    top: -200px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 800px;
+    height: 500px;
+    background: radial-gradient(ellipse, rgba(108,99,255,0.12) 0%, transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container {
+    position: relative;
+    z-index: 1;
+    max-width: 740px;
+    margin: 0 auto;
+    padding: 0 24px;
+  }
+
+  header {
+    padding: 48px 0 0;
+    text-align: center;
+    animation: fadeUp 0.6s ease both;
+  }
+
+  .logo-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(108,99,255,0.15);
+    border: 1px solid rgba(108,99,255,0.3);
+    border-radius: 100px;
+    padding: 6px 16px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent2);
+    margin-bottom: 24px;
+  }
+
+  .logo-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 8px var(--accent);
+    animation: pulse 2s ease infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.6; transform: scale(0.8); }
+  }
+
+  h1 {
+    font-size: clamp(40px, 7vw, 64px);
+    font-weight: 800;
+    line-height: 1.05;
+    letter-spacing: -0.03em;
+    margin-bottom: 16px;
+    background: linear-gradient(135deg, #fff 0%, var(--accent2) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .subtitle {
+    font-size: 16px;
+    color: var(--text2);
+    font-weight: 400;
+    max-width: 420px;
+    margin: 0 auto 32px;
+    line-height: 1.6;
+    font-family: var(--mono);
+  }
+
+  .disclaimer {
+    display: flex;
+    gap: 10px;
+    padding: 12px 16px;
+    background: rgba(245,166,35,0.08);
+    border: 1px solid rgba(245,166,35,0.2);
+    border-radius: 12px;
+    font-size: 13px;
+    color: var(--amber);
+    font-family: var(--mono);
+    line-height: 1.6;
+    margin-bottom: 32px;
+    text-align: left;
+  }
+
+  .stats {
+    display: flex;
+    justify-content: center;
+    gap: 32px;
+    margin-bottom: 40px;
+    animation: fadeUp 0.6s 0.1s ease both;
+  }
+
+  .stat { text-align: center; }
+  .stat-num { font-size: 22px; font-weight: 700; color: var(--text); display: block; }
+  .stat-label { font-size: 11px; color: var(--text3); font-family: var(--mono); text-transform: uppercase; letter-spacing: 0.08em; }
+  .stat-divider { width: 1px; background: var(--border2); align-self: stretch; }
+
+  .analyzer {
+    background: var(--bg2);
+    border: 1px solid var(--border2);
+    border-radius: 20px;
+    overflow: hidden;
+    margin-bottom: 32px;
+    animation: fadeUp 0.6s 0.2s ease both;
+  }
+
+  .analyzer-header {
+    padding: 20px 24px 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .mode-tabs { display: flex; gap: 4px; margin-bottom: -1px; }
+
+  .mode-tab {
+    padding: 8px 16px;
+    border-radius: 8px 8px 0 0;
+    border: 1px solid transparent;
+    border-bottom: none;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    background: transparent;
+    color: var(--text3);
+    font-family: var(--sans);
+    transition: all 0.2s;
+  }
+
+  .mode-tab:hover { color: var(--text2); }
+  .mode-tab.active {
+    background: var(--surface);
+    border-color: var(--border2);
+    color: var(--accent2);
+  }
+
+  .analyzer-body { padding: 24px; background: var(--surface); }
+
+  .examples-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+
+  .example-chip {
+    font-size: 11px;
+    font-family: var(--mono);
+    padding: 4px 12px;
+    border: 1px dashed rgba(255,255,255,0.15);
+    border-radius: 100px;
+    cursor: pointer;
+    color: var(--text3);
+    background: transparent;
+    transition: all 0.2s;
+  }
+
+  .example-chip:hover { border-color: var(--accent); color: var(--accent2); }
+
+  textarea {
+    width: 100%;
+    min-height: 140px;
+    resize: vertical;
+    background: var(--bg3);
+    border: 1px solid var(--border2);
+    border-radius: 12px;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.7;
+    padding: 14px 16px;
+    outline: none;
+    transition: border-color 0.2s;
+    margin-bottom: 16px;
+  }
+
+  textarea::placeholder { color: var(--text3); }
+  textarea:focus { border-color: var(--accent); }
+
+  .analyzer-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .hint { font-size: 12px; color: var(--text3); font-family: var(--mono); }
+
+  .analyze-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 24px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 10px;
+    font-family: var(--sans);
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    cursor: pointer;
+    transition: all 0.2s;
+    box-shadow: 0 0 24px rgba(108,99,255,0.3);
+  }
+
+  .analyze-btn:hover { background: var(--accent2); transform: translateY(-1px); box-shadow: 0 0 32px rgba(108,99,255,0.5); }
+  .analyze-btn:active { transform: translateY(0); }
+
+  .clear-btn {
+    padding: 12px 18px;
+    background: transparent;
+    color: var(--text3);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    font-family: var(--sans);
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .clear-btn:hover { color: var(--text2); border-color: var(--border2); }
+
+  #result { animation: fadeUp 0.5s ease both; }
+
+  .result-card {
+    background: var(--bg2);
+    border: 1px solid var(--border2);
+    border-radius: 20px;
+    overflow: hidden;
+    margin-bottom: 32px;
+  }
+
+  .result-hero {
+    padding: 28px 28px 24px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 20px;
+  }
+
+  .score-ring { position: relative; width: 80px; height: 80px; flex-shrink: 0; }
+  .score-ring svg { transform: rotate(-90deg); }
+  .score-num {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px; font-weight: 800; font-family: var(--sans);
+  }
+
+  .result-verdict { flex: 1; }
+
+  .verdict-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 14px;
+    border-radius: 100px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+
+  .verdict-reason { font-size: 14px; color: var(--text2); line-height: 1.6; font-family: var(--mono); font-weight: 300; }
+
+  .result-section { padding: 20px 28px; border-bottom: 1px solid var(--border); }
+  .result-section:last-child { border-bottom: none; }
+
+  .section-label {
+    font-size: 10px; font-weight: 700; letter-spacing: 0.12em;
+    text-transform: uppercase; color: var(--text3); margin-bottom: 14px; font-family: var(--mono);
+  }
+
+  .claim-item { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 12px; font-size: 13px; line-height: 1.6; font-family: var(--mono); color: var(--text2); }
+
+  .claim-badge {
+    flex-shrink: 0; padding: 2px 10px; border-radius: 100px;
+    font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-top: 1px;
+  }
+
+  .badge-supported { background: rgba(34,201,122,0.15); color: #22c97a; }
+  .badge-unverified { background: rgba(245,166,35,0.15); color: #f5a623; }
+  .badge-false { background: rgba(255,77,109,0.15); color: #ff4d6d; }
+
+  .flag-item {
+    display: flex; gap: 10px; align-items: flex-start;
+    padding: 10px 14px;
+    background: rgba(245,166,35,0.06);
+    border: 1px solid rgba(245,166,35,0.15);
+    border-radius: 10px; margin-bottom: 8px;
+    font-size: 13px; color: var(--amber); font-family: var(--mono); font-weight: 300; line-height: 1.5;
+  }
+
+  .confidence-box {
+    display: flex; gap: 12px; align-items: flex-start;
+    padding: 14px 18px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--border2);
+    border-radius: 12px;
+    font-size: 13px; color: var(--text2); font-family: var(--mono); font-weight: 300; line-height: 1.6;
+  }
+
+  .tip-box {
+    display: flex; gap: 12px; align-items: flex-start;
+    padding: 14px 18px;
+    background: rgba(108,99,255,0.08);
+    border: 1px solid rgba(108,99,255,0.2);
+    border-radius: 12px;
+    font-size: 13px; color: var(--accent2); font-family: var(--mono); font-weight: 300; line-height: 1.6;
+  }
+
+  .how-section { margin-bottom: 48px; animation: fadeUp 0.6s 0.3s ease both; }
+
+  .how-label {
+    font-size: 11px; font-weight: 700; letter-spacing: 0.1em;
+    text-transform: uppercase; color: var(--text3); text-align: center; margin-bottom: 20px; font-family: var(--mono);
+  }
+
+  .how-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+
+  .how-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 14px; padding: 18px; }
+  .how-num { font-size: 11px; font-family: var(--mono); color: var(--accent); font-weight: 500; margin-bottom: 8px; }
+  .how-title { font-size: 14px; font-weight: 700; margin-bottom: 6px; color: var(--text); }
+  .how-desc { font-size: 12px; color: var(--text3); font-family: var(--mono); line-height: 1.6; font-weight: 300; }
+
+  footer {
+    text-align: center; padding: 32px 0 48px;
+    border-top: 1px solid var(--border);
+    font-size: 12px; color: var(--text3); font-family: var(--mono);
+    animation: fadeUp 0.6s 0.4s ease both;
+  }
+
+  footer a { color: var(--accent2); text-decoration: none; }
+
+  .loading { text-align: center; padding: 48px; font-family: var(--mono); color: var(--text3); font-size: 13px; }
+
+  .spinner {
+    display: inline-block; width: 24px; height: 24px;
+    border: 2px solid var(--border2); border-top-color: var(--accent);
+    border-radius: 50%; animation: spin 0.7s linear infinite; margin-bottom: 12px;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+
+  @media (max-width: 600px) {
+    .how-grid { grid-template-columns: 1fr; }
+    .stats { gap: 20px; }
+    .result-hero { flex-direction: column; align-items: flex-start; gap: 16px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="glow"></div>
+
+<div class="container">
+
+  <header>
+    <div class="logo-badge">
+      <span class="logo-dot"></span>
+      AI Powered
+    </div>
+    <h1>DetectAI</h1>
+    <p class="subtitle">Paste any article, headline, or social post. Get an instant credibility report powered by AI.</p>
+    <div class="disclaimer">
+      <span style="font-size:16px;flex-shrink:0;">⚠</span>
+      <span><strong style="font-weight:600;">Screening tool only.</strong> DetectAI is a first-pass filter to raise awareness. Always verify results with trusted sources like Reuters, AP News, Snopes, or PolitiFact before drawing conclusions.</span>
+    </div>
+  </header>
+
+  <div class="stats">
+    <div class="stat">
+      <span class="stat-num">0–100</span>
+      <span class="stat-label">Credibility score</span>
+    </div>
+    <div class="stat-divider"></div>
+    <div class="stat">
+      <span class="stat-num">4</span>
+      <span class="stat-label">Content types</span>
+    </div>
+    <div class="stat-divider"></div>
+    <div class="stat">
+      <span class="stat-num">Free</span>
+      <span class="stat-label">No signup needed</span>
+    </div>
+  </div>
+
+  <div class="analyzer">
+    <div class="analyzer-header">
+      <div class="mode-tabs">
+        <button class="mode-tab active" onclick="setMode('article', this)">Article / Text</button>
+        <button class="mode-tab" onclick="setMode('headline', this)">Headline</button>
+        <button class="mode-tab" onclick="setMode('youtube', this)">YouTube</button>
+        <button class="mode-tab" onclick="setMode('social', this)">Social Post</button>
+      </div>
+    </div>
+    <div class="analyzer-body">
+      <div class="examples-row" id="examples-row"></div>
+      <textarea id="input" placeholder="Paste your content here..."></textarea>
+      <div class="analyzer-footer">
+        <span class="hint" id="hint">Paste an article or news story to analyze.</span>
+        <div style="display:flex;gap:8px;">
+          <button class="clear-btn" onclick="clearAll()">Clear</button>
+          <button class="analyze-btn" onclick="analyze()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+            Analyze
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="result"></div>
+
+  <div class="how-section">
+    <p class="how-label">How DetectAI works</p>
+    <div class="how-grid">
+      <div class="how-card">
+        <div class="how-num">01</div>
+        <div class="how-title">Paste content</div>
+        <div class="how-desc">Drop in any article, headline, YouTube description, or social media post.</div>
+      </div>
+      <div class="how-card">
+        <div class="how-num">02</div>
+        <div class="how-title">AI analyzes it</div>
+        <div class="how-desc">Claude carefully identifies claims and flags uncertainty rather than guessing.</div>
+      </div>
+      <div class="how-card">
+        <div class="how-num">03</div>
+        <div class="how-title">Verify yourself</div>
+        <div class="how-desc">Each report includes 2 specific sources to cross-check the findings yourself.</div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    Built for science fair · Powered by Claude AI · <a href="https://anthropic.com" target="_blank">Anthropic</a>
+  </footer>
+
+</div>
+
+<script>
+const EXAMPLES = {
+  article: [
+    "Scientists have confirmed that drinking bleach can cure the flu virus, according to a new study from unnamed researchers.",
+    "NASA confirmed water ice has been found on the Moon's surface, which could support future lunar missions."
+  ],
+  headline: [
+    "5G towers proven to spread COVID-19, says study",
+    "UN climate report warns of irreversible damage without immediate action"
+  ],
+  youtube: [
+    "In this video, I reveal how the government is hiding a cure for cancer that Big Pharma doesn't want you to know about.",
+    "Today we explore the James Webb Space Telescope's latest images of distant galaxies forming just after the Big Bang."
+  ],
+  social: [
+    "SHARE THIS: Eating raw garlic every morning has been PROVEN to kill cancer cells. Doctors won't tell you this!",
+    "New study published in Nature shows sleep deprivation linked to increased Alzheimer's risk."
+  ]
+};
+
+const HINTS = {
+  article: "Paste an article or news story to analyze.",
+  headline: "Paste a news headline or title to verify.",
+  youtube: "Paste a YouTube video description or transcript.",
+  social: "Paste a social media post or viral message."
+};
+
+const MODE_LABELS = {
+  article: 'article or text',
+  headline: 'headline',
+  youtube: 'YouTube description',
+  social: 'social media post'
+};
+
+let currentMode = 'article';
+
+function setMode(mode, el) {
+  currentMode = mode;
+  document.querySelectorAll('.mode-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('hint').textContent = HINTS[mode];
+  document.getElementById('input').value = '';
+  document.getElementById('result').innerHTML = '';
+  renderExamples();
+}
+
+function renderExamples() {
+  document.getElementById('examples-row').innerHTML =
+    EXAMPLES[currentMode].map((_, i) =>
+      `<button class="example-chip" onclick="useExample(${i})">Try example ${i + 1}</button>`
+    ).join('');
+}
+
+function useExample(i) {
+  document.getElementById('input').value = EXAMPLES[currentMode][i];
+}
+
+function clearAll() {
+  document.getElementById('input').value = '';
+  document.getElementById('result').innerHTML = '';
+}
+
+function getScoreColor(score) {
+  if (score >= 70) return { color: '#22c97a', bg: 'rgba(34,201,122,0.15)' };
+  if (score >= 40) return { color: '#f5a623', bg: 'rgba(245,166,35,0.12)' };
+  return { color: '#ff4d6d', bg: 'rgba(255,77,109,0.12)' };
+}
+
+async function analyze() {
+  const text = document.getElementById('input').value.trim();
+  if (!text) { alert('Please paste some content first.'); return; }
+
+  document.getElementById('result').innerHTML = `
+    <div class="result-card">
+      <div class="loading">
+        <div class="spinner"></div><br>
+        Analyzing content for misinformation...
+      </div>
+    </div>`;
+
+  const prompt = `You are a careful, conservative misinformation analyst. Analyze the following ${MODE_LABELS[currentMode]} for credibility. Follow these strict rules:
+
+RULES:
+- If you are not certain a claim is false, label it "Unverified" NOT "False". Only use "False" for claims that are clearly and demonstrably incorrect.
+- If content is too short or lacks context, say so in verdict_reason and give a score between 30-60 to reflect uncertainty.
+- Never guess. Lean toward "Questionable" rather than making a confident wrong call.
+- If this could be a recent event you may not know about, flag that explicitly.
+- Be specific about WHY something is a red flag.
+- Always recommend 2 specific real-world sources (e.g. Reuters, AP News, Snopes, PolitiFact, CDC, WHO).
+- Include a brief confidence note on how sure you are and why.
+
+Respond ONLY in valid JSON (no markdown, no backticks):
+{
+  "score": <0-100>,
+  "verdict": "<Credible | Questionable | Likely Misinformation>",
+  "verdict_reason": "<1 sentence>",
+  "claims": [{"text": "<claim>", "status": "<Supported | Unverified | False>"}],
+  "red_flags": ["<specific flag with explanation>"],
+  "confidence_note": "<1-2 sentences on your confidence level>",
+  "tip": "<verification tip naming 2 specific sources>"
+}
+
+Content: ${text}`;
+
+  try {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 1000,
+        messages: [{ role: "user", content: prompt }]
+      })
+    });
+    const data = await res.json();
+    const raw = (data.content || []).map(b => b.text || '').join('').replace(/```json|```/g, '').trim();
+    const r = JSON.parse(raw);
+    renderResult(r);
+  } catch(e) {
+    document.getElementById('result').innerHTML = `
+      <div class="result-card">
+        <div class="result-section">
+          <p style="color:var(--red);font-family:var(--mono);font-size:13px;">Analysis failed. Please try again.</p>
+        </div>
+      </div>`;
+  }
+}
+
+function renderResult(r) {
+  const sc = getScoreColor(r.score);
+  const circumference = 2 * Math.PI * 34;
+  const dash = (r.score / 100) * circumference;
+  const claimBadge = s => s === 'Supported' ? 'badge-supported' : s === 'False' ? 'badge-false' : 'badge-unverified';
+
+  const claimsHTML = (r.claims || []).map(c => `
+    <div class="claim-item">
+      <span class="claim-badge ${claimBadge(c.status)}">${c.status}</span>
+      <span>${c.text}</span>
+    </div>`).join('');
+
+  const flagsHTML = (r.red_flags || []).length
+    ? r.red_flags.map(f => `
+        <div class="flag-item">
+          <span style="flex-shrink:0;">⚠</span>
+          <span>${f}</span>
+        </div>`).join('')
+    : `<p style="font-size:13px;color:var(--text3);font-family:var(--mono);">No major red flags detected.</p>`;
+
+  document.getElementById('result').innerHTML = `
+    <div class="result-card">
+      <div class="result-hero">
+        <div class="score-ring">
+          <svg width="80" height="80" viewBox="0 0 80 80">
+            <circle cx="40" cy="40" r="34" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="6"/>
+            <circle cx="40" cy="40" r="34" fill="none" stroke="${sc.color}" stroke-width="6"
+              stroke-dasharray="${dash} ${circumference}" stroke-linecap="round"/>
+          </svg>
+          <div class="score-num" style="color:${sc.color}">${r.score}</div>
+        </div>
+        <div class="result-verdict">
+          <div class="verdict-label" style="background:${sc.bg};color:${sc.color};">${r.verdict}</div>
+          <div class="verdict-reason">${r.verdict_reason}</div>
+        </div>
+      </div>
+
+      <div class="result-section">
+        <div class="section-label">Key claims identified</div>
+        ${claimsHTML}
+      </div>
+
+      <div class="result-section">
+        <div class="section-label">Red flags</div>
+        ${flagsHTML}
+      </div>
+
+      <div class="result-section">
+        <div class="section-label">AI confidence note</div>
+        <div class="confidence-box">
+          <span style="font-size:16px;flex-shrink:0;">🧠</span>
+          <span>${r.confidence_note || 'No confidence note provided.'}</span>
+        </div>
+      </div>
+
+      <div class="result-section">
+        <div class="section-label">How to verify this yourself</div>
+        <div class="tip-box">
+          <span style="font-size:16px;flex-shrink:0;">💡</span>
+          <span>${r.tip}</span>
+        </div>
+      </div>
+    </div>`;
+}
+
+renderExamples();
+</script>
+</body>
+</html>
