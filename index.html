@@ -144,7 +144,13 @@
 <script>
 const API_KEY = "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";
 const API_URL = "https://openrouter.ai/api/v1/chat/completions";
-const MODEL = "meta-llama/llama-3.3-70b-instruct:free";
+
+// Multiple free models to try in order if one fails
+const MODELS = [
+  "google/gemini-2.0-flash-exp:free",
+  "mistralai/mistral-7b-instruct:free",
+  "meta-llama/llama-3.3-70b-instruct:free"
+];
 
 const EXAMPLES = {
   article: ["Scientists have confirmed that drinking bleach can cure the flu virus, according to a new study from unnamed researchers.", "NASA confirmed water ice has been found on the Moon's surface, which could support future lunar missions."],
@@ -179,6 +185,27 @@ function getScoreColor(score) {
   if (score >= 70) return { color: '#22c97a', bg: 'rgba(34,201,122,0.15)' };
   if (score >= 40) return { color: '#f5a623', bg: 'rgba(245,166,35,0.12)' };
   return { color: '#ff4d6d', bg: 'rgba(255,77,109,0.12)' };
+}
+
+async function tryModel(model, prompt) {
+  const res = await fetch(API_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${API_KEY}`,
+      "HTTP-Referer": "https://detectai.github.io",
+      "X-Title": "DetectAI"
+    },
+    body: JSON.stringify({
+      model: model,
+      messages: [{ role: "user", content: prompt }],
+      max_tokens: 1000
+    })
+  });
+  const data = await res.json();
+  if (data.error) throw new Error(data.error.message || 'Model error');
+  const raw = data.choices[0].message.content.replace(/```json|```/g, '').trim();
+  return JSON.parse(raw);
 }
 
 async function analyze() {
@@ -217,29 +244,28 @@ Content to analyze:
 ${text}
 """`;
 
-  try {
-    const res = await fetch(API_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${API_KEY}`,
-        "HTTP-Referer": "https://detectai.github.io",
-        "X-Title": "DetectAI"
-      },
-      body: JSON.stringify({
-        model: MODEL,
-        messages: [{ role: "user", content: prompt }],
-        max_tokens: 1000
-      })
-    });
-
-    const data = await res.json();
-    const raw = data.choices[0].message.content.replace(/```json|```/g, '').trim();
-    const r = JSON.parse(raw);
-    renderResult(r);
-  } catch(e) {
-    document.getElementById('result').innerHTML = `<div class="result-card"><div class="result-section"><p style="color:var(--red);font-family:var(--mono);font-size:13px;">⚠ Analysis failed. Please check your connection and try again.</p></div></div>`;
+  let lastError = null;
+  for (const model of MODELS) {
+    try {
+      document.querySelector('.loading') && (document.querySelector('.loading').innerHTML = `<div class="spinner"></div><br>Trying model: ${model.split('/')[1]}...`);
+      const r = await tryModel(model, prompt);
+      renderResult(r);
+      btn.disabled = false;
+      btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg> Analyze';
+      return;
+    } catch(e) {
+      lastError = e;
+      console.log(`Model ${model} failed:`, e.message);
+    }
   }
+
+  // All models failed
+  document.getElementById('result').innerHTML = `
+    <div class="result-card">
+      <div class="result-section">
+        <p style="color:var(--red);font-family:var(--mono);font-size:13px;">⚠ All models failed. Error: ${lastError?.message || 'Unknown error'}. Please try again in a moment.</p>
+      </div>
+    </div>`;
 
   btn.disabled = false;
   btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg> Analyze';
